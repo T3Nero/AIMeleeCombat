@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
+#include "Perception/AIPerceptionTypes.h"
 #include "Character_AIController.generated.h"
 
 /**
@@ -25,6 +26,13 @@ public:
 	UFUNCTION()
 	void PatrolArea();
 
+protected:
+
+	UFUNCTION()
+	void OnPerceptionUpdated(AActor* Actor, FAIStimulus const Stimulus);
+
+	void AIPerception();
+
 private:
 
 	class UNavigationSystemV1* NavSystem;
@@ -33,5 +41,7 @@ private:
 
 	UPROPERTY(BlueprintReadOnly, Category = "AI Behaviour", meta = (AllowPrivateAccess = "true"))
 	class AAI_BaseCharacter* AICharacter;
+
+	class UAISenseConfig_Sight* SightPerception;
 	
 };

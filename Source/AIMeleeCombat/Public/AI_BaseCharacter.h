@@ -6,6 +6,18 @@
 #include "GameFramework/Character.h"
 #include "AI_BaseCharacter.generated.h"
 
+UENUM(BlueprintType)
+enum class ECombatState : uint8
+{
+	ECS_Unoccupied UMETA(DisplayName = "Unoccupied"),
+	ECS_Attacking UMETA(DisplayName = "Attacking"),
+	ECS_Dodging UMETA(DisplayName = "Dodging"),
+	ECS_Blocking UMETA(DisplayName = "Blocking"),
+	ECS_Stunned UMETA(DisplayName = "Stunned"),
+	
+	ECS_MAX
+};
+
 UCLASS()
 class AIMELEECOMBAT_API AAI_BaseCharacter : public ACharacter
 {
@@ -21,23 +33,22 @@ protected:
 
 	void OnAIMoveCompleted(struct FAIRequestID RequestID, const struct FPathFollowingResult &Result);
 
-	bool IsEnemy(AActor* Target) const;
-
-	UFUNCTION()
-	void SeekEnemy();
-
 	UFUNCTION()
 	void StopSeekingEnemy();
 
 	UFUNCTION()
-	void OnEnemyDetectedOverlapBegin(UPrimitiveComponent* OverlappedComp,
-	AActor* OtherActor, UPrimitiveComponent* OtherComp,
-		int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+	void AttackEnemy();
+
+	void SetupStimulus();
 
 	UFUNCTION()
-	void OnEnemyDetectedOverlapEnd(UPrimitiveComponent* OverlappedComp,
-	AActor* OtherActor, UPrimitiveComponent* OtherComp,
-		int32 OtherBodyIndex);
+	void AttackCombo();
+
+	void SetMontageToPlay(UAnimMontage* Montage, FName Section) const;
+
+	// Sets CombatState to Unoccupied so the AI is free to use next action
+	UFUNCTION(BlueprintCallable)
+	void SetUnoccupied();
 
 private:
 
@@ -45,11 +56,7 @@ private:
 	USkeletalMeshComponent* Weapon;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
-	class USphereComponent* EnemyDetectionSphere;
-
-	class ACharacter_AIController* Character_AIController;
-
-	AAI_BaseCharacter* EnemyReference;
+	class UAIPerceptionStimuliSourceComponent* Stimulus;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
 	float PatrolRadius;
@@ -65,13 +72,14 @@ private:
 	float MaxHealth;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
+	float WaitTimeTillSeek;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
 	bool bCanPatrol;
+
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	float AttackRange;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
-	float WaitTimeTillSeek;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	bool EnemyDetected;
@@ -79,15 +87,34 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	bool bInAttackRange;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	bool bShouldAttack;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	bool bIsAggressive;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	UAnimMontage* AttackMontage;
+
+	UPROPERTY(BlueprintReadWrite, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	int32 ComboIndex;
 
 
+	ECombatState CombatState;
+	class ACharacter_AIController* Character_AIController;
+	AAI_BaseCharacter* EnemyReference;
 	FTimerHandle SeekTimerHandle;
+	FTimerHandle AttackTimerHandle;
 
 
+public:
 
-public:	
+	UFUNCTION()
+	void SeekEnemy(AActor* Enemy);
 
+	bool IsEnemy(AActor* Target) const;
+
+	// public getters (allows access to private variables in other classes
 	FORCEINLINE float GetPatrolRadius() const { return PatrolRadius; }
-	FORCEINLINE float GetTeamNumber() const { return TeamNumber; }
 	FORCEINLINE bool CanPatrol() const { return bCanPatrol; }
 };

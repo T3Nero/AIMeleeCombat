@@ -4,10 +4,15 @@
 #include "Character_AIController.h"
 #include "AI_BaseCharacter.h"
 #include "NavigationSystem.h"
+#include "Perception/AISenseConfig_Sight.h"
+#include "Perception/AIPerceptionStimuliSourceComponent.h"
+#include "Perception/AIPerceptionComponent.h"
 
 ACharacter_AIController::ACharacter_AIController()
 {
 	NavSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(this);
+	AIPerception();
+
 }
 
 void ACharacter_AIController::BeginPlay()
@@ -36,6 +41,32 @@ void ACharacter_AIController::PatrolArea()
 			MoveToLocation(PatrolLocation);
 		}
 	}
+}
+
+void ACharacter_AIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus const Stimulus)
+{
+	if(AICharacter->IsEnemy(Actor))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s"), *Actor->GetName());
+		AICharacter->SeekEnemy(Actor);
+	}
+}
+
+void ACharacter_AIController::AIPerception()
+{
+	// initialize sight perception
+	SightPerception = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("Sight Perception"));
+	SetPerceptionComponent(*CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("Perception Component")));
+	SightPerception->SightRadius = 1000.0f;
+	SightPerception->LoseSightRadius = SightPerception->SightRadius + 200.0f;
+	SightPerception->PeripheralVisionAngleDegrees = 180.0f;
+	SightPerception->SetMaxAge(5.0f);
+	SightPerception->AutoSuccessRangeFromLastSeenLocation = SightPerception->SightRadius + 500.0f;
+
+	// adds SightPerception Config to PerceptionComponent
+	GetPerceptionComponent()->SetDominantSense(*SightPerception->GetSenseImplementation());
+	GetPerceptionComponent()->OnTargetPerceptionUpdated.AddDynamic(this, &ACharacter_AIController::OnPerceptionUpdated);
+	GetPerceptionComponent()->ConfigureSense(*SightPerception);
 }
 
 
