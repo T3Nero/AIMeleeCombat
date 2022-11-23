@@ -45,7 +45,7 @@ void ACharacter_AIController::PatrolArea()
 
 void ACharacter_AIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus const Stimulus)
 {
-	if(AICharacter->IsEnemy(Actor))
+	if(AICharacter->IsEnemy(Actor) && !AICharacter->GetEnemyDetected())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("%s"), *Actor->GetName());
 		AICharacter->SeekEnemy(Actor);

@@ -19,7 +19,7 @@ AAI_BaseCharacter::AAI_BaseCharacter() :
 	WaitTimeTillSeek (0.5f),
 	bCanPatrol (false),
 	AttackRange (150.0f),
-	EnemyDetected(false),
+	bEnemyDetected(false),
 	bInAttackRange(false),
 	bShouldAttack(false),
 	bIsAggressive(false),
@@ -44,8 +44,8 @@ void AAI_BaseCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	CurrentHealth = MaxHealth;
-
 	Character_AIController = Cast<ACharacter_AIController>(GetController());
+	AttackEnemy();
 
 	// Continues to call OnAIMoveCompleted() once current patrolling has finished & if bCanPatrol = true
 	if(Character_AIController && bCanPatrol)
@@ -59,7 +59,7 @@ void AAI_BaseCharacter::BeginPlay()
 // Calls PatrolArea() from AIController class
 void AAI_BaseCharacter::OnAIMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result)
 {
-	if(!EnemyDetected)
+	if(!bEnemyDetected)
 	{
 		Character_AIController->PatrolArea();
 	}
@@ -84,23 +84,18 @@ void AAI_BaseCharacter::SeekEnemy(AActor* Enemy)
 {
 	if(Character_AIController)
 	{
-		EnemyDetected = true;
+		bEnemyDetected = true;
 		EnemyReference = Cast<AAI_BaseCharacter>(Enemy);
 
 		if(EnemyReference)
 		{
-			if(CombatState == ECombatState::ECS_Unoccupied)
-			{
-				AttackEnemy();
-			}
-
 			if(bIsAggressive)
 			{
 				Character_AIController->MoveToLocation(EnemyReference->GetActorLocation(), AttackRange, true);
 			}
 
 			// Continues to call SeekEnemy() every "WaitTimeTillSeek" seconds
-			const FTimerDelegate SeekDelegate = FTimerDelegate::CreateUObject(this, &AAI_BaseCharacter::SeekEnemy, Enemy);
+			SeekDelegate = FTimerDelegate::CreateUObject(this, &AAI_BaseCharacter::SeekEnemy, Enemy);
 			GetWorld()->GetTimerManager().SetTimer(SeekTimerHandle, SeekDelegate, WaitTimeTillSeek, true);
 		}
 	}
@@ -110,6 +105,7 @@ void AAI_BaseCharacter::StopSeekingEnemy()
 {
 	// Clears the timer handle so SeekEnemy() stops being called
 	GetWorld()->GetTimerManager().ClearTimer(SeekTimerHandle);
+	UE_LOG(LogTemp, Warning, TEXT("Clear Timer"));
 }
 
 void AAI_BaseCharacter::AttackEnemy()
@@ -118,15 +114,12 @@ void AAI_BaseCharacter::AttackEnemy()
 	if((EnemyReference->GetActorLocation() - GetActorLocation()).Length() <= (AttackRange + 50))
 	{
 		StopSeekingEnemy();
+		EnemyReference->StopSeekingEnemy();
 		bInAttackRange = true;
 		bShouldAttack = true;
 		UE_LOG(LogTemp, Warning, TEXT("In Attack Range"));
 
-		GetWorld()->GetTimerManager().SetTimer(AttackTimerHandle, this, &AAI_BaseCharacter::AttackCombo, 0.5f, true);
-	}
-	else
-	{
-		GetWorld()->GetTimerManager().ClearTimer(AttackTimerHandle);
+		GetWorld()->GetTimerManager().SetTimer(AttackTimerHandle, this, &AAI_BaseCharacter::AttackCombo, 1.0f, true);
 	}
 }
 
@@ -153,9 +146,11 @@ void AAI_BaseCharacter::AttackCombo()
 				break;
 			case 1:
 				SectionName = "Attack02";
+				AttackEnemy();
 				break;
 			case 2:
 				SectionName = "Attack03";
+				AttackEnemy();
 				break;
 			case 3:
 				SectionName = "Attack04";
@@ -183,6 +178,8 @@ void AAI_BaseCharacter::SetUnoccupied()
 	// Reset Attack & CombatState
 	ComboIndex = 0;
 	bShouldAttack = true;
+	AttackEnemy();
+	GetWorld()->GetTimerManager().ClearTimer(AttackTimerHandle);
 	CombatState = ECombatState::ECS_Unoccupied;
 }
 

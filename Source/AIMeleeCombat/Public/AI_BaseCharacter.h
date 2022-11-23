@@ -82,7 +82,7 @@ private:
 	float AttackRange;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
-	bool EnemyDetected;
+	bool bEnemyDetected;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	bool bInAttackRange;
@@ -104,6 +104,7 @@ private:
 	class ACharacter_AIController* Character_AIController;
 	AAI_BaseCharacter* EnemyReference;
 	FTimerHandle SeekTimerHandle;
+	FTimerDelegate SeekDelegate;
 	FTimerHandle AttackTimerHandle;
 
 
@@ -117,4 +118,5 @@ public:
 	// public getters (allows access to private variables in other classes
 	FORCEINLINE float GetPatrolRadius() const { return PatrolRadius; }
 	FORCEINLINE bool CanPatrol() const { return bCanPatrol; }
+	FORCEINLINE bool GetEnemyDetected() const { return bEnemyDetected; }
 };
