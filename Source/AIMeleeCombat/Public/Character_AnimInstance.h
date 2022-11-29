@@ -39,5 +39,7 @@ public:
 	void UpdateAnimationProperties(float DeltaTime);
 
 	virtual void NativeInitializeAnimation() override;
+
+	FORCEINLINE float GetDirection() const { return Direction; }
 	
 };

@@ -43,5 +43,10 @@ private:
 	class AAI_BaseCharacter* AICharacter;
 
 	class UAISenseConfig_Sight* SightPerception;
+
+	float CurrentPatrolValue;
+
+public:
+
 	
 };

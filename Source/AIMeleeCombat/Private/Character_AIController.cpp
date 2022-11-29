@@ -4,6 +4,7 @@
 #include "Character_AIController.h"
 #include "AI_BaseCharacter.h"
 #include "NavigationSystem.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AIPerceptionComponent.h"
@@ -18,7 +19,6 @@ ACharacter_AIController::ACharacter_AIController()
 void ACharacter_AIController::BeginPlay()
 {
 	Super::BeginPlay();
-	PatrolArea();
 
 }
 
@@ -33,10 +33,17 @@ void ACharacter_AIController::OnPossess(APawn* InPawn)
 
 void ACharacter_AIController::PatrolArea()
 {
-	if(AICharacter && AICharacter->CanPatrol())
+	if(AICharacter)
 	{
+		if(AICharacter->GetEnemyDetected()) { return; }
+
 		if(NavSystem)
 		{
+			if(!AICharacter->GetCharacterMovement()->bOrientRotationToMovement)
+			{
+				AICharacter->GetCharacterMovement()->bOrientRotationToMovement = true;
+			}
+
 			NavSystem->K2_GetRandomLocationInNavigableRadius(GetWorld(), AICharacter->GetActorLocation(), PatrolLocation, AICharacter->GetPatrolRadius());
 			MoveToLocation(PatrolLocation);
 		}
@@ -45,10 +52,21 @@ void ACharacter_AIController::PatrolArea()
 
 void ACharacter_AIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus const Stimulus)
 {
-	if(AICharacter->IsEnemy(Actor) && !AICharacter->GetEnemyDetected())
+	if(AICharacter)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("%s"), *Actor->GetName());
-		AICharacter->SeekEnemy(Actor);
+		if(AICharacter->IsEnemy(Actor) && !AICharacter->GetEnemyDetected())
+		{
+			AAI_BaseCharacter* Enemy = Cast<AAI_BaseCharacter>(Actor);
+
+			AICharacter->SetEnemy(Enemy);
+			AICharacter->SetEnemyDetected(true);
+		}
+
+		if((Actor->GetActorLocation() - AICharacter->GetActorLocation()).Length() >= SightPerception->LoseSightRadius)
+		{
+			AICharacter->SetEnemy(nullptr);
+			AICharacter->SetEnemyDetected(false);
+		}
 	}
 }
 
@@ -60,7 +78,7 @@ void ACharacter_AIController::AIPerception()
 	SightPerception->SightRadius = 1000.0f;
 	SightPerception->LoseSightRadius = SightPerception->SightRadius + 200.0f;
 	SightPerception->PeripheralVisionAngleDegrees = 180.0f;
-	SightPerception->SetMaxAge(5.0f);
+	SightPerception->SetMaxAge(0);
 	SightPerception->AutoSuccessRangeFromLastSeenLocation = SightPerception->SightRadius + 500.0f;
 
 	// adds SightPerception Config to PerceptionComponent

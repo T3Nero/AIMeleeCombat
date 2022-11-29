@@ -5,10 +5,15 @@
 #include "Character_AIController.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "AITypes.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AISense_Sight.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "Character_AnimInstance.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "AI_UtilityComponent.h"
 
 // Sets default values
 AAI_BaseCharacter::AAI_BaseCharacter() :
@@ -16,7 +21,6 @@ AAI_BaseCharacter::AAI_BaseCharacter() :
 	TeamNumber(0),
 	CurrentHealth (100.f),
 	MaxHealth (100.f),
-	WaitTimeTillSeek (0.5f),
 	bCanPatrol (false),
 	AttackRange (150.0f),
 	bEnemyDetected(false),
@@ -24,18 +28,24 @@ AAI_BaseCharacter::AAI_BaseCharacter() :
 	bShouldAttack(false),
 	bIsAggressive(false),
 	ComboIndex(0),
-	CombatState(ECombatState::ECS_Unoccupied)
+	StrafeDirection(EStrafeDirection::ESD_NULL),
+	CombatState(ECombatState::ECS_Unoccupied),
+	PatrolValue(0.2f),
+	SeekValue(0.5f),
+	StrafeValue(0.8f)
 
 {
 
 	Weapon = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Weapon Mesh"));
 	Weapon->SetupAttachment(GetMesh(), FName("WeaponSocket"));
 
-	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Block);
+	UtilityComponent = CreateDefaultSubobject<UAI_UtilityComponent>(TEXT("Utility Component"));
 
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Block);
 
 	// Required so AIPerception on the AIController detects this character
 	SetupStimulus();
+
 
 }
 
@@ -45,7 +55,6 @@ void AAI_BaseCharacter::BeginPlay()
 	Super::BeginPlay();
 	CurrentHealth = MaxHealth;
 	Character_AIController = Cast<ACharacter_AIController>(GetController());
-	AttackEnemy();
 
 	// Continues to call OnAIMoveCompleted() once current patrolling has finished & if bCanPatrol = true
 	if(Character_AIController && bCanPatrol)
@@ -54,15 +63,26 @@ void AAI_BaseCharacter::BeginPlay()
 		(this, &AAI_BaseCharacter::OnAIMoveCompleted);
 	}
 
+	WeightValues.AddUnique(PatrolValue);
+	WeightValues.AddUnique(SeekValue);
+	WeightValues.AddUnique(StrafeValue);
+
+	AttackEnemy();
 }
 
-// Calls PatrolArea() from AIController class
+void AAI_BaseCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if(bEnemyDetected)
+	{
+		RotateTowardsTarget(EnemyReference->GetActorLocation());
+	}
+	ChooseSteeringBehavior();
+}
+
 void AAI_BaseCharacter::OnAIMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result)
 {
-	if(!bEnemyDetected)
-	{
-		Character_AIController->PatrolArea();
-	}
+	SetUnoccupied();
 }
 
 // returns true if targets team number is not equal to owners team number
@@ -84,42 +104,34 @@ void AAI_BaseCharacter::SeekEnemy(AActor* Enemy)
 {
 	if(Character_AIController)
 	{
-		bEnemyDetected = true;
-		EnemyReference = Cast<AAI_BaseCharacter>(Enemy);
-
 		if(EnemyReference)
 		{
 			if(bIsAggressive)
 			{
 				Character_AIController->MoveToLocation(EnemyReference->GetActorLocation(), AttackRange, true);
 			}
-
-			// Continues to call SeekEnemy() every "WaitTimeTillSeek" seconds
-			SeekDelegate = FTimerDelegate::CreateUObject(this, &AAI_BaseCharacter::SeekEnemy, Enemy);
-			GetWorld()->GetTimerManager().SetTimer(SeekTimerHandle, SeekDelegate, WaitTimeTillSeek, true);
 		}
 	}
 }
 
-void AAI_BaseCharacter::StopSeekingEnemy()
-{
-	// Clears the timer handle so SeekEnemy() stops being called
-	GetWorld()->GetTimerManager().ClearTimer(SeekTimerHandle);
-	UE_LOG(LogTemp, Warning, TEXT("Clear Timer"));
-}
-
 void AAI_BaseCharacter::AttackEnemy()
 {
+	float RandWaitTime = UKismetMathLibrary::RandomFloatInRange(1.5f, 3.0f);
+	GetWorld()->GetTimerManager().SetTimer(AttackTimerHandle, this, &AAI_BaseCharacter::AttackEnemy, RandWaitTime, true);
+	if(EnemyReference == nullptr) { return; }
+
 	// in attack range, stop seeking, attack
 	if((EnemyReference->GetActorLocation() - GetActorLocation()).Length() <= (AttackRange + 50))
 	{
-		StopSeekingEnemy();
-		EnemyReference->StopSeekingEnemy();
-		bInAttackRange = true;
 		bShouldAttack = true;
-		UE_LOG(LogTemp, Warning, TEXT("In Attack Range"));
-
-		GetWorld()->GetTimerManager().SetTimer(AttackTimerHandle, this, &AAI_BaseCharacter::AttackCombo, 1.0f, true);
+		bInAttackRange = true;
+		AttackCombo();
+	}
+	else
+	{
+		bShouldAttack = false;
+		bInAttackRange = false;
+		SetUnoccupied();
 	}
 }
 
@@ -135,6 +147,7 @@ void AAI_BaseCharacter::AttackCombo()
 	if(bInAttackRange && bShouldAttack)
 	{
 		UAnimMontage* Attack = AttackMontage;
+		ComboIndex = UKismetMathLibrary::RandomIntegerInRange(0, 3);
 
 		if(Attack)
 		{
@@ -146,11 +159,9 @@ void AAI_BaseCharacter::AttackCombo()
 				break;
 			case 1:
 				SectionName = "Attack02";
-				AttackEnemy();
 				break;
 			case 2:
 				SectionName = "Attack03";
-				AttackEnemy();
 				break;
 			case 3:
 				SectionName = "Attack04";
@@ -177,10 +188,115 @@ void AAI_BaseCharacter::SetUnoccupied()
 {
 	// Reset Attack & CombatState
 	ComboIndex = 0;
-	bShouldAttack = true;
-	AttackEnemy();
-	GetWorld()->GetTimerManager().ClearTimer(AttackTimerHandle);
 	CombatState = ECombatState::ECS_Unoccupied;
+	StrafeDirection = EStrafeDirection::ESD_NULL;
+}
+
+void AAI_BaseCharacter::RotateTowardsTarget(FVector Target)
+{
+	if(EnemyReference == nullptr) { return; }
+
+	const FVector WorldLocation = GetCapsuleComponent()->GetComponentLocation();
+	const FRotator WorldRotation = GetCapsuleComponent()->GetComponentRotation();
+
+	const FRotator LookAtRotation = UKismetMathLibrary::FindLookAtRotation(WorldLocation, Target);
+
+	double LerpValue = UKismetMathLibrary::Lerp(WorldRotation.Yaw, LookAtRotation.Yaw, 0.5f);
+	const FRotator Rotation = UKismetMathLibrary::MakeRotator(WorldRotation.Roll, WorldRotation.Pitch, LerpValue);
+	GetCapsuleComponent()->SetWorldRotation(Rotation);
+}
+
+void AAI_BaseCharacter::StrafeAroundEnemy()
+{
+	if((EnemyReference->GetActorLocation() - GetActorLocation()).Length() <= (AttackRange + 200))
+	{
+		if(GetCharacterMovement()->bOrientRotationToMovement)
+		{
+			GetCharacterMovement()->bOrientRotationToMovement = false;
+		}
+
+		if(StrafeDirection == EStrafeDirection::ESD_NULL)
+		{
+			const float Value = UKismetMathLibrary::RandomFloatInRange(0,1);
+			if(Value <= 0.3f)
+			{
+				StrafeDirection = EStrafeDirection::ESD_Left;
+			}
+			if(Value > 0.3f && Value <= 0.6f)
+			{
+				StrafeDirection = EStrafeDirection::ESD_Right;
+			}
+			else
+			{
+				StrafeDirection = EStrafeDirection::ESD_Back;
+			}
+		}
+
+		FVector StrafeDirectionVector;
+
+		switch (StrafeDirection)
+		{
+		case EStrafeDirection::ESD_Back:
+			StrafeDirectionVector = GetActorForwardVector() * -1;
+			break;
+		case EStrafeDirection::ESD_Left:
+			StrafeDirectionVector = GetActorRightVector() * -1;
+			break;
+		case EStrafeDirection::ESD_Right:
+			StrafeDirectionVector = GetActorRightVector();
+			break;
+		default:
+			break;
+		}
+		const FVector CurrentLocation = GetCapsuleComponent()->GetComponentLocation();
+		FVector Direction = UKismetMathLibrary::RotateAngleAxis((StrafeDirectionVector * 200), 360, FVector(0,0,1));
+		FVector StrafeDestination = (CurrentLocation + Direction);
+
+		Character_AIController->MoveToLocation(StrafeDestination, 10, true);
+		SetUnoccupied();
+	}
+}
+
+void AAI_BaseCharacter::ChooseSteeringBehavior()
+{
+	if(CombatState != ECombatState::ECS_Unoccupied) {return;}
+
+	int32 ChosenIndex = 1;
+	float RandNum = UKismetMathLibrary::RandomFloatInRange(0, 1);
+	for (float Value : WeightValues)
+	{
+		if(RandNum < Value)
+		{
+			ChosenIndex = WeightValues.IndexOfByKey(Value);
+			break;
+		}
+	}
+
+	switch(ChosenIndex)
+	{
+		case 0:
+			if(!bCanPatrol) { return; }
+
+			Character_AIController->PatrolArea();
+			CombatState = ECombatState::ECS_Patrol;
+		break;
+		case 1:
+			if(EnemyReference == nullptr || bInAttackRange)
+			{
+				return;
+			}
+			SeekEnemy(EnemyReference);
+			CombatState = ECombatState::ECS_Seek;
+		break;
+		case 2:
+			if(EnemyReference == nullptr) { return; }
+
+			StrafeAroundEnemy();
+			CombatState = ECombatState::ECS_Strafe;
+		break;
+		default:
+		break;
+	}
 }
 
 
