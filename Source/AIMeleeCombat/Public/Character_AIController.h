@@ -23,8 +23,8 @@ public:
 	// allows the ai controller to possess the character its attached too
 	virtual void OnPossess(APawn* InPawn) override;
 
-	UFUNCTION()
-	void PatrolArea();
+	//UFUNCTION()
+	//void PatrolArea();
 
 protected:
 

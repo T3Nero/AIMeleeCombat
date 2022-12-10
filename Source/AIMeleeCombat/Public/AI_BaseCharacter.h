@@ -52,13 +52,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	class UAI_UtilityComponent* UtilityComponent;
 
-	UFUNCTION()
-	void AttackEnemy();
-
 	void SetupStimulus();
 
-	UFUNCTION()
-	void AttackCombo();
+
 
 	void SetMontageToPlay(UAnimMontage* Montage, FName Section) const;
 
@@ -68,10 +64,10 @@ protected:
 
 	void RotateTowardsTarget(FVector Target);
 
-	void StrafeAroundEnemy();
-
 	UFUNCTION()
-	void ChooseSteeringBehavior();
+	void StrafeOnCooldown();
+
+	
 
 private:
 
@@ -103,6 +99,9 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	float AttackRange;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	float RangedAttackRange;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	bool bEnemyDetected;
 
@@ -110,13 +109,25 @@ private:
 	bool bInAttackRange;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	bool bInRangedAttackRange;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	bool bShouldAttack;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	bool bIsAggressive;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
+	bool bCanStrafe;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	UAnimMontage* AttackMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	UAnimMontage* RangedAttackMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	UAnimMontage* UltimateAttackMontage;
 
 	UPROPERTY(BlueprintReadWrite, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	int32 ComboIndex;
@@ -133,17 +144,32 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
 	TArray<float> WeightValues;
 
+	float InitialPatrolValue;
+
 
 	ECombatState CombatState;
 	class ACharacter_AIController* Character_AIController;
 	AAI_BaseCharacter* EnemyReference;
 	FTimerHandle AttackTimerHandle;
+	FTimerHandle StrafeCooldownHandle;
 
 
 public:
 
 	UFUNCTION()
 	void SeekEnemy(AActor* Enemy);
+
+	void StrafeAroundEnemy();
+
+	//UFUNCTION()
+	//void AttackEnemy();
+
+	UFUNCTION()
+	void AttackCombo();
+
+	void RangedAttack();
+
+	void UltimateAttack();
 
 	bool IsEnemy(AActor* Target) const;
 
@@ -154,7 +180,12 @@ public:
 	FORCEINLINE bool CanPatrol() const { return bCanPatrol; }
 	FORCEINLINE bool GetEnemyDetected() const { return bEnemyDetected; }
 	FORCEINLINE ECombatState GetCombatState() const { return CombatState; }
+	FORCEINLINE AAI_BaseCharacter* GetEnemy() const { return EnemyReference; }
+	FORCEINLINE bool InAttackRange() const { return bInAttackRange; }
+	FORCEINLINE bool InRangedAttackRange() const { return bInRangedAttackRange; }
+	FORCEINLINE bool CanStrafe() const { return bCanStrafe; }
 
+		 
 	FORCEINLINE void SetEnemy(AAI_BaseCharacter* Enemy) {EnemyReference = Enemy;}
 	FORCEINLINE void SetEnemyDetected(bool ED) {bEnemyDetected = ED;}
 };

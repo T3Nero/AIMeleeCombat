@@ -48,7 +48,14 @@ protected:
 
 	void ChooseBestAbility();
 
-	float ScoreAbilities(float BehaviorValue, TArray<float> Conditions);
+	UFUNCTION()
+	void UpdateScore();
+
+	float ScoreAbilities(TArray<float> Conditions);
+
+	float SeekScore();
+
+	float StrafeScore();
 
 	float AttackScore();
 
@@ -61,9 +68,13 @@ protected:
 	float BlockScore();
 
 
+
 private:
 
 	FCombatBehavior* S_CombatBehavior;
+
+	
+	class AAI_BaseCharacter* AICharacter;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI Behavior", meta = (AllowPrivateAccess = "true"))
 	UDataTable* CombatBehaviorData;

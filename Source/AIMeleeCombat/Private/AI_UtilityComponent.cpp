@@ -2,6 +2,8 @@
 
 
 #include "AI_UtilityComponent.h"
+#include "AI_BaseCharacter.h"
+#include "Kismet/KismetMathLibrary.h"
 
 // Sets default values for this component's properties
 UAI_UtilityComponent::UAI_UtilityComponent()
@@ -9,8 +11,6 @@ UAI_UtilityComponent::UAI_UtilityComponent()
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = true;
-
-
 }
 
 
@@ -19,6 +19,7 @@ void UAI_UtilityComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	InitialiseBehavior();
+
 
 
 }
@@ -30,12 +31,23 @@ void UAI_UtilityComponent::InitialiseBehavior()
 		const FString ContextString = RowName.ToString();
 		S_CombatBehavior = CombatBehaviorData->FindRow<FCombatBehavior>(RowName, ContextString, true);
 
-		AbilitiesAvailable.Add(AttackScore());
-		AbilitiesAvailable.Add(RangedAttackScore());
-		AbilitiesAvailable.Add(UltimateAttackScore());
-		AbilitiesAvailable.Add(DodgeScore());
-		AbilitiesAvailable.Add(BlockScore());
 
+		AICharacter = Cast<AAI_BaseCharacter>(GetOwner());
+		
+		if(AICharacter)
+		{
+			AbilitiesAvailable.Add(SeekScore());
+			AbilitiesAvailable.Add(StrafeScore());
+			AbilitiesAvailable.Add(AttackScore());
+			AbilitiesAvailable.Add(RangedAttackScore());
+			AbilitiesAvailable.Add(UltimateAttackScore());
+			AbilitiesAvailable.Add(DodgeScore());
+			AbilitiesAvailable.Add(BlockScore());
+
+			//const float RandWaitTime = UKismetMathLibrary::RandomFloatInRange(1.0f, 2.0f);
+			FTimerHandle UpdateScoreTimer;
+			GetWorld()->GetTimerManager().SetTimer(UpdateScoreTimer, this, &UAI_UtilityComponent::UpdateScore, 2.0f, true);
+		}
 	}
 }
 
@@ -52,30 +64,50 @@ void UAI_UtilityComponent::ChooseBestAbility()
 		}
 	}
 
+
+
 	switch (BestAbilityIndex)
 	{
-		// Attack
+		// Seek
 	case 0:
+		if(AICharacter->GetEnemy())
+		{
+			AICharacter->SeekEnemy(AICharacter->GetEnemy());
+		}
+		break;
+
+		// Strafe
+	case 1:
+		AICharacter->StrafeAroundEnemy();
+		break;
+
+		// Attack
+	case 2:
 		UE_LOG(LogTemp, Warning, TEXT("Attack"));
+		AICharacter->AttackCombo();
 		break;
 
 		// Ranged Attack
-	case 1:
+	case 3:
 		UE_LOG(LogTemp, Warning, TEXT("Ranged Attack"));
+		AICharacter->RangedAttack();
 		break;
 
 		// Ultimate Attack
-	case 2:
+	case 4:
+		UE_LOG(LogTemp, Warning, TEXT("Ultimate Attack"));
+		AICharacter->UltimateAttack();
 		break;
 
 		// Dodge
-	case 3:
+	case 5:
+		
 		break;
 
 		// Block
-	case 4:
+	case 6:
+		
 		break;
-
 
 
 	default:
@@ -86,9 +118,59 @@ void UAI_UtilityComponent::ChooseBestAbility()
 
 }
 
-float UAI_UtilityComponent::ScoreAbilities(float BehaviorValue, TArray<float> Conditions)
+void UAI_UtilityComponent::UpdateScore()
 {
-	float Score = BehaviorValue;
+	if(AICharacter->GetCombatState() != ECombatState::ECS_Unoccupied) { return; }
+
+	//SeekScore();
+	//StrafeScore();
+	//AttackScore();
+	//RangedAttackScore();
+	//UltimateAttackScore();
+	//BlockScore();
+	//DodgeScore();
+
+
+	for (const float Item : AbilitiesAvailable)
+	{
+		if(Item == AbilitiesAvailable[0])
+		{
+			AbilitiesAvailable[0] = SeekScore();
+		}
+		if(Item == AbilitiesAvailable[1])
+		{
+			AbilitiesAvailable[1] = StrafeScore();
+		}
+		if(Item == AbilitiesAvailable[2])
+		{
+			AbilitiesAvailable[2] = AttackScore();
+		}
+		if(Item == AbilitiesAvailable[3])
+		{
+			AbilitiesAvailable[3] = RangedAttackScore();
+		}
+		if(Item == AbilitiesAvailable[4])
+		{
+			AbilitiesAvailable[4] = UltimateAttackScore();
+		}
+		if(Item == AbilitiesAvailable[5])
+		{
+			AbilitiesAvailable[5] = DodgeScore();
+		}
+		if(Item == AbilitiesAvailable[6])
+		{
+			AbilitiesAvailable[6] = BlockScore();
+		}
+		
+	}
+
+
+	ChooseBestAbility();
+}
+
+float UAI_UtilityComponent::ScoreAbilities(TArray<float> Conditions)
+{
+	float Score = 1;
 	for (const float AbilityScore: Conditions)
 	{
 		Score *= AbilityScore;
@@ -106,31 +188,139 @@ float UAI_UtilityComponent::ScoreAbilities(float BehaviorValue, TArray<float> Co
 	return Score;
 }
 
+float UAI_UtilityComponent::SeekScore()
+{
+	TArray<float> SeekConditions;
+	float SeekValue = 0;
+	if(!AICharacter->InAttackRange())
+	{
+		SeekValue = 0.9f;
+	}
+	else
+	{
+		SeekValue = 0;
+	}
+
+	if(AICharacter->InRangedAttackRange())
+	{
+		SeekValue = 0;
+	}
+
+	
+	SeekConditions.Add(SeekValue);
+	return ScoreAbilities(SeekConditions);
+}
+
+float UAI_UtilityComponent::StrafeScore()
+{
+	TArray<float> StrafeConditions;
+	float StrafeValue = 0;
+	if(AICharacter->CanStrafe())
+	{
+		StrafeValue = 0.7;
+	}
+	else
+	{
+		StrafeValue = 0;
+	}
+
+	StrafeConditions.Add(StrafeValue);
+
+	float RandNum = UKismetMathLibrary::RandomFloatInRange(0, 1);
+	if(RandNum < StrafeValue)
+	{
+		return ScoreAbilities(StrafeConditions);
+	}
+	else
+	{
+		return 0;
+	}
+}
+
 float UAI_UtilityComponent::AttackScore()
 {
 	TArray<float> AttackConditions;
-	float InAttackRange = 1.0f;
+	float AttackRangeValue = 0;
 
-	AttackConditions.Add(InAttackRange);
+	if(AICharacter->InAttackRange())
+	{
+		AttackRangeValue = 0.6f;
+	}
+	else
+	{
+		AttackRangeValue = 0;
+	}
 
-	float Score = ScoreAbilities(S_CombatBehavior->AttackValue, AttackConditions);
-	return Score;
+	AttackConditions.Add(AttackRangeValue);
+
+	float RandNum = UKismetMathLibrary::RandomFloatInRange(0, 1);
+	if(RandNum < S_CombatBehavior->AttackValue)
+	{
+		return ScoreAbilities(AttackConditions);
+	}
+	else
+	{
+		return 0;
+	}
+
+
+	
 }
 
 float UAI_UtilityComponent::RangedAttackScore()
 {
 	TArray<float> RangedAttackConditions;
-	float InRangedAttackRange = 0.5f;
+	float RangedAttackValue = 0;
 
-	RangedAttackConditions.Add(InRangedAttackRange);
+	
+	if(AICharacter->InRangedAttackRange())
+	{
+		RangedAttackValue = 0.4f;
+	}
+	else
+	{
+		RangedAttackValue = 0;
+	}
 
-	float Score = ScoreAbilities(S_CombatBehavior->RangedAttackValue, RangedAttackConditions);
-	return Score;
+	RangedAttackConditions.Add(RangedAttackValue);
+
+	float RandNum = UKismetMathLibrary::RandomFloatInRange(0, 1);
+	if(RandNum < S_CombatBehavior->RangedAttackValue)
+	{
+		return ScoreAbilities(RangedAttackConditions);
+	}
+	else
+	{
+		return 0;
+	}
 }
 
 float UAI_UtilityComponent::UltimateAttackScore()
 {
-	return 0;
+	TArray<float> UltimateAttackConditions;
+	float UltimateAttackValue = 0;
+
+	if(AICharacter->InAttackRange())
+	{
+		UltimateAttackValue = 0.3f;
+	}
+	else
+	{
+		UltimateAttackValue = 0;
+	}
+
+	UltimateAttackConditions.Add(UltimateAttackValue);
+
+
+	float RandNum = UKismetMathLibrary::RandomFloatInRange(0, 1);
+	if(RandNum < S_CombatBehavior->UltimateAttackValue)
+	{
+		return ScoreAbilities(UltimateAttackConditions);
+	}
+	else
+	{
+		return 0;
+	}
 }
 
 float UAI_UtilityComponent::DodgeScore()
@@ -148,6 +338,6 @@ void UAI_UtilityComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	ChooseBestAbility();
+
 }
 

@@ -31,24 +31,24 @@ void ACharacter_AIController::OnPossess(APawn* InPawn)
 	AICharacter = Cast<AAI_BaseCharacter>(InPawn);
 }
 
-void ACharacter_AIController::PatrolArea()
-{
-	if(AICharacter)
-	{
-		if(AICharacter->GetEnemyDetected()) { return; }
-
-		if(NavSystem)
-		{
-			if(!AICharacter->GetCharacterMovement()->bOrientRotationToMovement)
-			{
-				AICharacter->GetCharacterMovement()->bOrientRotationToMovement = true;
-			}
-
-			NavSystem->K2_GetRandomLocationInNavigableRadius(GetWorld(), AICharacter->GetActorLocation(), PatrolLocation, AICharacter->GetPatrolRadius());
-			MoveToLocation(PatrolLocation);
-		}
-	}
-}
+//void ACharacter_AIController::PatrolArea()
+//{
+//	if(AICharacter)
+//	{
+//		if(AICharacter->GetEnemyDetected()) { return; }
+//
+//		if(NavSystem)
+//		{
+//			if(!AICharacter->GetCharacterMovement()->bOrientRotationToMovement)
+//			{
+//				AICharacter->GetCharacterMovement()->bOrientRotationToMovement = true;
+//			}
+//
+//			NavSystem->K2_GetRandomLocationInNavigableRadius(GetWorld(), AICharacter->GetActorLocation(), PatrolLocation, AICharacter->GetPatrolRadius());
+//			MoveToLocation(PatrolLocation);
+//		}
+//	}
+//}
 
 void ACharacter_AIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus const Stimulus)
 {

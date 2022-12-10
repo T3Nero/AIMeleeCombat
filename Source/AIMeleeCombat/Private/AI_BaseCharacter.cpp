@@ -23,10 +23,13 @@ AAI_BaseCharacter::AAI_BaseCharacter() :
 	MaxHealth (100.f),
 	bCanPatrol (false),
 	AttackRange (150.0f),
+	RangedAttackRange(400.0f),
 	bEnemyDetected(false),
 	bInAttackRange(false),
+	bInRangedAttackRange(false),
 	bShouldAttack(false),
 	bIsAggressive(false),
+	bCanStrafe(true),
 	ComboIndex(0),
 	StrafeDirection(EStrafeDirection::ESD_NULL),
 	CombatState(ECombatState::ECS_Unoccupied),
@@ -57,7 +60,7 @@ void AAI_BaseCharacter::BeginPlay()
 	Character_AIController = Cast<ACharacter_AIController>(GetController());
 
 	// Continues to call OnAIMoveCompleted() once current patrolling has finished & if bCanPatrol = true
-	if(Character_AIController && bCanPatrol)
+	if(Character_AIController)
 	{
 		Character_AIController->GetPathFollowingComponent()->OnRequestFinished.AddUObject
 		(this, &AAI_BaseCharacter::OnAIMoveCompleted);
@@ -66,18 +69,40 @@ void AAI_BaseCharacter::BeginPlay()
 	WeightValues.AddUnique(PatrolValue);
 	WeightValues.AddUnique(SeekValue);
 	WeightValues.AddUnique(StrafeValue);
+	InitialPatrolValue = PatrolValue;
 
-	AttackEnemy();
 }
 
 void AAI_BaseCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if(bEnemyDetected)
+
+	if(bEnemyDetected && CombatState == ECombatState::ECS_Unoccupied)
 	{
 		RotateTowardsTarget(EnemyReference->GetActorLocation());
 	}
-	ChooseSteeringBehavior();
+
+	if(EnemyReference)
+	{
+		const float EnemyDistance = (EnemyReference->GetActorLocation() - GetActorLocation()).Length();
+		if(EnemyDistance <= AttackRange)
+		{
+			bInAttackRange = true;
+		}
+		else
+		{
+			bInAttackRange = false;
+		}
+
+		if(EnemyDistance > AttackRange && EnemyDistance <= RangedAttackRange)
+		{
+			bInRangedAttackRange = true;
+		}
+		else
+		{
+			bInRangedAttackRange = false;
+		}
+	}
 }
 
 void AAI_BaseCharacter::OnAIMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result)
@@ -102,38 +127,40 @@ bool AAI_BaseCharacter::IsEnemy(AActor* Target) const
 // Character moves towards target enemy until it is in attack range
 void AAI_BaseCharacter::SeekEnemy(AActor* Enemy)
 {
+	if(CombatState != ECombatState::ECS_Unoccupied) { return; }
+
 	if(Character_AIController)
 	{
 		if(EnemyReference)
 		{
 			if(bIsAggressive)
 			{
-				Character_AIController->MoveToLocation(EnemyReference->GetActorLocation(), AttackRange, true);
+				Character_AIController->MoveToLocation(EnemyReference->GetActorLocation(), 300, true);
+				CombatState = ECombatState::ECS_Seek;
+				SetUnoccupied();
 			}
 		}
 	}
 }
 
-void AAI_BaseCharacter::AttackEnemy()
-{
-	float RandWaitTime = UKismetMathLibrary::RandomFloatInRange(1.5f, 3.0f);
-	GetWorld()->GetTimerManager().SetTimer(AttackTimerHandle, this, &AAI_BaseCharacter::AttackEnemy, RandWaitTime, true);
-	if(EnemyReference == nullptr) { return; }
-
-	// in attack range, stop seeking, attack
-	if((EnemyReference->GetActorLocation() - GetActorLocation()).Length() <= (AttackRange + 50))
-	{
-		bShouldAttack = true;
-		bInAttackRange = true;
-		AttackCombo();
-	}
-	else
-	{
-		bShouldAttack = false;
-		bInAttackRange = false;
-		SetUnoccupied();
-	}
-}
+//void AAI_BaseCharacter::AttackEnemy()
+//{
+//	if(EnemyReference == nullptr) { return; }
+//
+//	// in attack range, stop seeking, attack
+//	if((EnemyReference->GetActorLocation() - GetActorLocation()).Length() <= (AttackRange + 50))
+//	{
+//		bShouldAttack = true;
+//		bInAttackRange = true;
+//		AttackCombo();
+//	}
+//	else
+//	{
+//		bShouldAttack = false;
+//		bInAttackRange = false;
+//		SetUnoccupied();
+//	}
+//}
 
 void AAI_BaseCharacter::SetupStimulus()
 {
@@ -144,7 +171,9 @@ void AAI_BaseCharacter::SetupStimulus()
 
 void AAI_BaseCharacter::AttackCombo()
 {
-	if(bInAttackRange && bShouldAttack)
+	if(CombatState != ECombatState::ECS_Unoccupied) { return; }
+
+	if(bInAttackRange)
 	{
 		UAnimMontage* Attack = AttackMontage;
 		ComboIndex = UKismetMathLibrary::RandomIntegerInRange(0, 3);
@@ -170,12 +199,28 @@ void AAI_BaseCharacter::AttackCombo()
 				SectionName = "Attack01";
 				break;
 			}
-			bShouldAttack = false;
 			CombatState = ECombatState::ECS_Attacking;
 			SetMontageToPlay(Attack, SectionName);
 		}
 	}
 }
+
+void AAI_BaseCharacter::RangedAttack()
+{
+	if(CombatState != ECombatState::ECS_Unoccupied) { return; }
+
+	CombatState = ECombatState::ECS_Attacking;
+	SetMontageToPlay(RangedAttackMontage, "Default");
+}
+
+void AAI_BaseCharacter::UltimateAttack()
+{
+	if(CombatState != ECombatState::ECS_Unoccupied) { return; }
+
+	CombatState = ECombatState::ECS_Attacking;
+	SetMontageToPlay(UltimateAttackMontage, "Default");
+}
+
 
 void AAI_BaseCharacter::SetMontageToPlay(UAnimMontage* Montage, FName Section) const
 {
@@ -184,6 +229,7 @@ void AAI_BaseCharacter::SetMontageToPlay(UAnimMontage* Montage, FName Section) c
 	AnimInstance->Montage_JumpToSection(Section);
 }
 
+// Called after an action is finished (also called in Anim Notify at the end of Montages)
 void AAI_BaseCharacter::SetUnoccupied()
 {
 	// Reset Attack & CombatState
@@ -206,98 +252,115 @@ void AAI_BaseCharacter::RotateTowardsTarget(FVector Target)
 	GetCapsuleComponent()->SetWorldRotation(Rotation);
 }
 
+void AAI_BaseCharacter::StrafeOnCooldown()
+{
+	bCanStrafe = true;
+	GetWorld()->GetTimerManager().ClearTimer(StrafeCooldownHandle);
+}
+
 void AAI_BaseCharacter::StrafeAroundEnemy()
 {
-	if((EnemyReference->GetActorLocation() - GetActorLocation()).Length() <= (AttackRange + 200))
+	if(CombatState != ECombatState::ECS_Unoccupied) { return; }
+
+	if(GetCharacterMovement()->bOrientRotationToMovement)
 	{
-		if(GetCharacterMovement()->bOrientRotationToMovement)
-		{
-			GetCharacterMovement()->bOrientRotationToMovement = false;
-		}
-
-		if(StrafeDirection == EStrafeDirection::ESD_NULL)
-		{
-			const float Value = UKismetMathLibrary::RandomFloatInRange(0,1);
-			if(Value <= 0.3f)
-			{
-				StrafeDirection = EStrafeDirection::ESD_Left;
-			}
-			if(Value > 0.3f && Value <= 0.6f)
-			{
-				StrafeDirection = EStrafeDirection::ESD_Right;
-			}
-			else
-			{
-				StrafeDirection = EStrafeDirection::ESD_Back;
-			}
-		}
-
-		FVector StrafeDirectionVector;
-
-		switch (StrafeDirection)
-		{
-		case EStrafeDirection::ESD_Back:
-			StrafeDirectionVector = GetActorForwardVector() * -1;
-			break;
-		case EStrafeDirection::ESD_Left:
-			StrafeDirectionVector = GetActorRightVector() * -1;
-			break;
-		case EStrafeDirection::ESD_Right:
-			StrafeDirectionVector = GetActorRightVector();
-			break;
-		default:
-			break;
-		}
-		const FVector CurrentLocation = GetCapsuleComponent()->GetComponentLocation();
-		FVector Direction = UKismetMathLibrary::RotateAngleAxis((StrafeDirectionVector * 200), 360, FVector(0,0,1));
-		FVector StrafeDestination = (CurrentLocation + Direction);
-
-		Character_AIController->MoveToLocation(StrafeDestination, 10, true);
-		SetUnoccupied();
+		GetCharacterMovement()->bOrientRotationToMovement = false;
 	}
+
+	if(StrafeDirection == EStrafeDirection::ESD_NULL)
+	{
+		const float Value = UKismetMathLibrary::RandomFloatInRange(0,1);
+		if(Value <= 0.3f)
+		{
+			StrafeDirection = EStrafeDirection::ESD_Left;
+		}
+		if(Value > 0.3f && Value <= 0.6f)
+		{
+			StrafeDirection = EStrafeDirection::ESD_Right;
+		}
+		else
+		{
+			StrafeDirection = EStrafeDirection::ESD_Back;
+		}
+	}
+
+	FVector StrafeDirectionVector;
+
+	switch (StrafeDirection)
+	{
+	case EStrafeDirection::ESD_Back:
+		StrafeDirectionVector = GetActorForwardVector() * -1;
+		break;
+	case EStrafeDirection::ESD_Left:
+		StrafeDirectionVector = GetActorRightVector() * -1;
+		break;
+	case EStrafeDirection::ESD_Right:
+		StrafeDirectionVector = GetActorRightVector();
+		break;
+	default:
+		break;
+	}
+	const FVector CurrentLocation = GetCapsuleComponent()->GetComponentLocation();
+	FVector Direction = UKismetMathLibrary::RotateAngleAxis((StrafeDirectionVector * 200), 360, FVector(0,0,1));
+	FVector StrafeDestination = (CurrentLocation + Direction);
+
+	Character_AIController->MoveToLocation(StrafeDestination, 10, true);
+	bCanStrafe = false;
+	GetWorld()->GetTimerManager().SetTimer(StrafeCooldownHandle, this, &AAI_BaseCharacter::StrafeOnCooldown, UKismetMathLibrary::RandomFloatInRange(8, 12), false);
+
+	SetUnoccupied();
 }
 
-void AAI_BaseCharacter::ChooseSteeringBehavior()
-{
-	if(CombatState != ECombatState::ECS_Unoccupied) {return;}
-
-	int32 ChosenIndex = 1;
-	float RandNum = UKismetMathLibrary::RandomFloatInRange(0, 1);
-	for (float Value : WeightValues)
-	{
-		if(RandNum < Value)
-		{
-			ChosenIndex = WeightValues.IndexOfByKey(Value);
-			break;
-		}
-	}
-
-	switch(ChosenIndex)
-	{
-		case 0:
-			if(!bCanPatrol) { return; }
-
-			Character_AIController->PatrolArea();
-			CombatState = ECombatState::ECS_Patrol;
-		break;
-		case 1:
-			if(EnemyReference == nullptr || bInAttackRange)
-			{
-				return;
-			}
-			SeekEnemy(EnemyReference);
-			CombatState = ECombatState::ECS_Seek;
-		break;
-		case 2:
-			if(EnemyReference == nullptr) { return; }
-
-			StrafeAroundEnemy();
-			CombatState = ECombatState::ECS_Strafe;
-		break;
-		default:
-		break;
-	}
-}
+//void AAI_BaseCharacter::ChooseSteeringBehavior()
+//{
+//	if(CombatState != ECombatState::ECS_Unoccupied) {return;}
+//
+//	if(!bCanPatrol || bEnemyDetected)
+//	{
+//		PatrolValue = 0;
+//	}
+//	else
+//	{
+//		PatrolValue = InitialPatrolValue;
+//	}
+//
+//	int32 ChosenIndex = 0;
+//	const float RandNum = UKismetMathLibrary::RandomFloatInRange(0, 1);
+//	for (const float Value : WeightValues)
+//	{
+//		if(RandNum < Value)
+//		{
+//			ChosenIndex = WeightValues.IndexOfByKey(Value);
+//			break;
+//		}
+//	}
+//
+//	switch(ChosenIndex)
+//	{
+//		case 0:
+//			if(!bCanPatrol) { return; }
+//
+//			Character_AIController->PatrolArea();
+//			CombatState = ECombatState::ECS_Patrol;
+//		break;
+//		case 1:
+//			if(EnemyReference == nullptr) { return; }
+//
+//
+//			SeekEnemy(EnemyReference);
+//			CombatState = ECombatState::ECS_Seek;
+//		break;
+//		case 2:
+//			if(EnemyReference == nullptr) { return; }
+//
+//			StrafeAroundEnemy();
+//			CombatState = ECombatState::ECS_Strafe;
+//		break;
+//
+//		default:
+//		break;
+//	}
+//}
 
 
 
