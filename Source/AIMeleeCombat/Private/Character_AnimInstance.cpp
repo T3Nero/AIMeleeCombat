@@ -5,7 +5,6 @@
 #include "AI_BaseCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
-#include "KismetAnimationLibrary.h"
 
 // Default Values
 UCharacter_AnimInstance::UCharacter_AnimInstance() :
@@ -46,10 +45,8 @@ void UCharacter_AnimInstance::UpdateAnimationProperties(float DeltaTime)
 			bIsAccelerating = false;
 		}
 
-		// Sets Characters Direction based on current look rotation & movement rotation
-		//FRotator LookRotation = AICharacter->GetBaseAimRotation();
+		// Gets characters current velocity to determine direction to apply (used for strafing when choosing which animation to play in the Anim Blend Space)
 		FRotator MovementRotation = UKismetMathLibrary::MakeRotFromX(AICharacter->GetVelocity());
 		Direction = UKismetMathLibrary::NormalizedDeltaRotator(MovementRotation, AICharacter->GetActorRotation()).Yaw;
-		//Direction = UKismetAnimationLibrary::CalculateDirection(AICharacter->GetVelocity(), AICharacter->GetActorRotation());
 	}
 }

@@ -41,6 +41,7 @@ public:
 	UAI_UtilityComponent();
 
 protected:
+
 	// Called when the game starts
 	virtual void BeginPlay() override;
 
@@ -51,7 +52,7 @@ protected:
 	UFUNCTION()
 	void UpdateScore();
 
-	float ScoreAbilities(TArray<float> Conditions);
+	float ScoreAbilities(float BehaviorValue, TArray<float> Conditions);
 
 	float SeekScore();
 
@@ -68,12 +69,10 @@ protected:
 	float BlockScore();
 
 
-
 private:
 
 	FCombatBehavior* S_CombatBehavior;
 
-	
 	class AAI_BaseCharacter* AICharacter;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI Behavior", meta = (AllowPrivateAccess = "true"))
@@ -84,11 +83,5 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI Behavior", meta = (AllowPrivateAccess = "true"))
 	TArray<float> AbilitiesAvailable;
-
-
-public:	
-	// Called every frame
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-
 		
 };

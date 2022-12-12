@@ -23,9 +23,6 @@ public:
 	// allows the ai controller to possess the character its attached too
 	virtual void OnPossess(APawn* InPawn) override;
 
-	//UFUNCTION()
-	//void PatrolArea();
-
 protected:
 
 	UFUNCTION()
@@ -37,16 +34,9 @@ private:
 
 	class UNavigationSystemV1* NavSystem;
 
-	FVector PatrolLocation;
-
 	UPROPERTY(BlueprintReadOnly, Category = "AI Behaviour", meta = (AllowPrivateAccess = "true"))
 	class AAI_BaseCharacter* AICharacter;
 
 	class UAISenseConfig_Sight* SightPerception;
-
-	float CurrentPatrolValue;
-
-public:
-
 	
 };

@@ -4,7 +4,6 @@
 #include "Character_AIController.h"
 #include "AI_BaseCharacter.h"
 #include "NavigationSystem.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AIPerceptionComponent.h"
@@ -13,7 +12,6 @@ ACharacter_AIController::ACharacter_AIController()
 {
 	NavSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(this);
 	AIPerception();
-
 }
 
 void ACharacter_AIController::BeginPlay()
@@ -57,7 +55,6 @@ void ACharacter_AIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus con
 		if(AICharacter->IsEnemy(Actor) && !AICharacter->GetEnemyDetected())
 		{
 			AAI_BaseCharacter* Enemy = Cast<AAI_BaseCharacter>(Actor);
-
 			AICharacter->SetEnemy(Enemy);
 			AICharacter->SetEnemyDetected(true);
 		}

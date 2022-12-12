@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "AI_BaseCharacter.generated.h"
 
+// Combat States are set so actions cant be performed whilst another action is already being performed (must be Unoccupied before performing next action)
 UENUM(BlueprintType)
 enum class ECombatState : uint8
 {
@@ -17,6 +18,7 @@ enum class ECombatState : uint8
 	ECS_Patrol UMETA(DisplayName = "Patrol"),
 	ECS_Seek UMETA(DisplayName = "Seek"),
 	ECS_Strafe UMETA(DisplayName = "Strafe"),
+	ECS_Dead UMETA(DisplayName = "Dead"),
 	
 	ECS_MAX
 };
@@ -54,9 +56,7 @@ protected:
 
 	void SetupStimulus();
 
-
-
-	void SetMontageToPlay(UAnimMontage* Montage, FName Section) const;
+	void SetMontageToPlay(UAnimMontage* Montage, FName Section);
 
 	// Sets CombatState to Unoccupied so the AI is free to use next action
 	UFUNCTION(BlueprintCallable)
@@ -65,7 +65,21 @@ protected:
 	void RotateTowardsTarget(FVector Target);
 
 	UFUNCTION()
-	void StrafeOnCooldown();
+	void StrafeOffCooldown();
+
+	UFUNCTION()
+	void BlockOffCooldown();
+
+	UFUNCTION()
+	void DodgeOffCooldown();
+
+	UFUNCTION(BlueprintCallable)
+	void DamageDetectTrace();
+
+	void DamageEnemy(AActor* Enemy);
+
+	// Called in "TakeDamage(...)" once CurrentHealth = 0 // Plays Death Montage, clears current target enemy & sets combat state to Dead
+	void Death();
 
 	
 
@@ -111,14 +125,29 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	bool bInRangedAttackRange;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
-	bool bShouldAttack;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	bool bIsAggressive;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
 	bool bCanStrafe;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
+	bool bCanBlock;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
+	bool bCanDodge;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
+	bool bAttacking;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
+	bool bIsDead;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = WeaponComponents, meta = (AllowPrivateAccess = "true"))
+	USceneComponent* TraceStart;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = WeaponComponents, meta = (AllowPrivateAccess = "true"))
+	USceneComponent* TraceEnd;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	UAnimMontage* AttackMontage;
@@ -129,22 +158,21 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	UAnimMontage* UltimateAttackMontage;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	UAnimMontage* BlockingMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	UAnimMontage* DodgingMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Combat, meta = (AllowPrivateAccess = "true"))
+	UAnimMontage* DeathMontage;
+
 	UPROPERTY(BlueprintReadWrite, Category = Combat, meta = (AllowPrivateAccess = "true"))
 	int32 ComboIndex;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
-	float PatrolValue;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
-	float SeekValue;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
-	float StrafeValue;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
-	TArray<float> WeightValues;
-
-	float InitialPatrolValue;
+	// Checks if actor has been damaged so we only damage once during the current attack (cleared in anim notify after attack)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = Runtime, meta = (AllowPrivateAccess = "true"))
+	TArray<AActor*> AlreadyDamagedActors;
 
 
 	ECombatState CombatState;
@@ -152,30 +180,32 @@ private:
 	AAI_BaseCharacter* EnemyReference;
 	FTimerHandle AttackTimerHandle;
 	FTimerHandle StrafeCooldownHandle;
+	FTimerHandle BlockCooldownHandle;
+	FTimerHandle DodgeCooldownHandle;
 
 
 public:
 
-	UFUNCTION()
 	void SeekEnemy(AActor* Enemy);
 
 	void StrafeAroundEnemy();
 
-	//UFUNCTION()
-	//void AttackEnemy();
-
-	UFUNCTION()
 	void AttackCombo();
 
 	void RangedAttack();
 
 	void UltimateAttack();
 
+	void Blocking();
+
+	void Dodging();
+
 	bool IsEnemy(AActor* Target) const;
 
+	// overriden from actor class
+	virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
-
-	// public getters (allows access to private variables in other classes
+	// public getters (allows access to private variables in other classes)
 	FORCEINLINE float GetPatrolRadius() const { return PatrolRadius; }
 	FORCEINLINE bool CanPatrol() const { return bCanPatrol; }
 	FORCEINLINE bool GetEnemyDetected() const { return bEnemyDetected; }
@@ -184,8 +214,12 @@ public:
 	FORCEINLINE bool InAttackRange() const { return bInAttackRange; }
 	FORCEINLINE bool InRangedAttackRange() const { return bInRangedAttackRange; }
 	FORCEINLINE bool CanStrafe() const { return bCanStrafe; }
+	FORCEINLINE bool CanBlock() const { return bCanBlock; }
+	FORCEINLINE bool CanDodge() const { return bCanDodge; }
+	FORCEINLINE bool GetIsAttacking() const { return bAttacking; }
+	FORCEINLINE bool IsEnemyDead() const { return bIsDead; }
 
-		 
+	// public setters (allows access to private variables in other classes)
 	FORCEINLINE void SetEnemy(AAI_BaseCharacter* Enemy) {EnemyReference = Enemy;}
 	FORCEINLINE void SetEnemyDetected(bool ED) {bEnemyDetected = ED;}
 };
