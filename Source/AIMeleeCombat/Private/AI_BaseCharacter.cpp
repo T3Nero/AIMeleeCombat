@@ -15,17 +15,18 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AI_UtilityComponent.h"
 #include "Components/SceneComponent.h"
+#include "PlayerCharacter.h"
 
 // Sets default values
 AAI_BaseCharacter::AAI_BaseCharacter() :
 	PatrolRadius (1000.f),
 	TeamNumber(0),
-	CurrentHealth (100.f),
-	MaxHealth (100.f),
+	CurrentHealth (300.f),
+	MaxHealth (300.f),
 	bCanPatrol (false),
 	StrafeDirection(EStrafeDirection::ESD_NULL),
 	AttackRange (250.0f),
-	RangedAttackRange(450.0f),
+	RangedAttackRange(350.0f),
 	bEnemyDetected(false),
 	bInAttackRange(false),
 	bInRangedAttackRange(false),
@@ -34,6 +35,8 @@ AAI_BaseCharacter::AAI_BaseCharacter() :
 	bCanBlock(true),
 	bCanDodge(true),
 	bAttacking(false),
+	bIsBlocking(false),
+	bIsDodging(false),
 	bIsDead(false),
 	ComboIndex(0),
 	CombatState(ECombatState::ECS_Unoccupied)
@@ -81,15 +84,42 @@ void AAI_BaseCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if(EnemyReference && CombatState == ECombatState::ECS_Unoccupied)
+	if(EnemyReference && CombatState == ECombatState::ECS_Unoccupied && bEnemyDetected)
 	{
 		RotateTowardsTarget(EnemyReference->GetActorLocation());
 	}
 
-	if(EnemyReference)
+	if(EnemyPlayer && CombatState == ECombatState::ECS_Unoccupied && bEnemyDetected)
+	{
+		RotateTowardsTarget(EnemyPlayer->GetActorLocation());
+	}
+
+	if(EnemyReference && bEnemyDetected)
 	{
 		const float EnemyDistance = (EnemyReference->GetActorLocation() - GetActorLocation()).Length();
-		if(EnemyDistance > 100 && EnemyDistance <= AttackRange)
+		if(EnemyDistance <= AttackRange)
+		{
+			bInAttackRange = true;
+		}
+		else
+		{
+			bInAttackRange = false;
+		}
+
+		if(EnemyDistance > AttackRange && EnemyDistance <= RangedAttackRange)
+		{
+			bInRangedAttackRange = true;
+		}
+		else
+		{
+			bInRangedAttackRange = false;
+		}
+	}
+
+	if(EnemyPlayer && bEnemyDetected)
+	{
+		const float EnemyDistance = (EnemyPlayer->GetActorLocation() - GetActorLocation()).Length();
+		if(EnemyDistance <= AttackRange)
 		{
 			bInAttackRange = true;
 		}
@@ -115,19 +145,31 @@ void AAI_BaseCharacter::OnAIMoveCompleted(FAIRequestID RequestID, const FPathFol
 }
 
 // returns true if targets team number is not equal to owners team number
-bool AAI_BaseCharacter::IsEnemy(AActor* Target) const
+bool AAI_BaseCharacter::IsEnemy(AActor* Target)
 {
-	const AAI_BaseCharacter* Enemy = Cast<AAI_BaseCharacter>(Target);
-	if(Enemy && Enemy->TeamNumber != TeamNumber)
+	if(Target->GetInstigatorController()->IsPlayerController())
 	{
-		return true;
+		EnemyPlayer = Cast<APlayerCharacter>(Target);
+		if(EnemyPlayer && EnemyPlayer->GetTeamNumber() != TeamNumber)
+		{
+			EnemyReference = nullptr;
+			return true;
+		}
 	}
 	else
 	{
-		return false;
+		EnemyReference = Cast<AAI_BaseCharacter>(Target);
+		if(EnemyReference && EnemyReference->TeamNumber != TeamNumber)
+		{
+			EnemyPlayer = nullptr;
+			return true;
+		}
 	}
+
+	return false;
 }
 
+// When ApplyDamage() is called in DealDamage(), TakeDamage() is called on the character receiving the damage
 float AAI_BaseCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator,
 	AActor* DamageCauser)
 {
@@ -139,13 +181,26 @@ float AAI_BaseCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Dama
 	}
 	else
 	{
+		// Attack does half damage if character is currently blocking
+		if(bIsBlocking)
+		{
+			DamageAmount *= 0.5f;
+			
+		}
+
+		// Character avoids taking damage if they are dodging
+		if(bIsDodging)
+		{
+			DamageAmount = 0;
+		}
+
 		CurrentHealth -= DamageAmount;
 	}
 
 	return Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 }
 
-// Character moves towards target enemy until it is within attacking range
+// Character moves towards target enemy until it is within attacking range (if the character is aggressive)
 void AAI_BaseCharacter::SeekEnemy(AActor* Enemy)
 {
 	if(CombatState != ECombatState::ECS_Unoccupied) { return; }
@@ -157,6 +212,15 @@ void AAI_BaseCharacter::SeekEnemy(AActor* Enemy)
 			if(bIsAggressive)
 			{
 				Character_AIController->MoveToLocation(EnemyReference->GetActorLocation(), 200, true);
+				SetUnoccupied();
+			}
+		}
+
+		if(EnemyPlayer)
+		{
+			if(bIsAggressive)
+			{
+				Character_AIController->MoveToLocation(EnemyPlayer->GetActorLocation(), 200, true);
 				SetUnoccupied();
 			}
 		}
@@ -233,6 +297,7 @@ void AAI_BaseCharacter::Blocking()
 {
 	if(CombatState != ECombatState::ECS_Unoccupied) { return; }
 
+	bIsBlocking = true;
 	CombatState = ECombatState::ECS_Blocking;
 	SetMontageToPlay(BlockingMontage, "Default");
 
@@ -244,7 +309,7 @@ void AAI_BaseCharacter::Dodging()
 {
 	if(CombatState != ECombatState::ECS_Unoccupied) { return; }
 
-	int32 DodgeIndex = UKismetMathLibrary::RandomIntegerInRange(0, 1);
+	const int32 DodgeIndex = UKismetMathLibrary::RandomIntegerInRange(0, 1);
 	if(DodgingMontage)
 	{
 		FName SectionName;
@@ -260,6 +325,7 @@ void AAI_BaseCharacter::Dodging()
 			break;
 		}
 
+		bIsDodging = true;
 		CombatState = ECombatState::ECS_Dodging;
 		SetMontageToPlay(DodgingMontage, SectionName);
 	}
@@ -283,12 +349,52 @@ void AAI_BaseCharacter::SetUnoccupied()
 	// Reset Attack & CombatState
 	ComboIndex = 0;
 	bAttacking = false;
-	CombatState = ECombatState::ECS_Unoccupied;
+	bIsBlocking = false;
+	bIsDodging = false;
+
 	StrafeDirection = EStrafeDirection::ESD_NULL;
 
 	if(!GetCharacterMovement()->bOrientRotationToMovement)
 	{
 		GetCharacterMovement()->bOrientRotationToMovement = true;
+	}
+
+	// Clears enemy target if current enemy dies
+	if(EnemyReference)
+	{
+		if(EnemyReference->IsDead())
+		{
+			EnemyReference = nullptr;
+			bEnemyDetected = false;
+		}
+	}
+
+	// Clears player target when player dies
+	if(EnemyPlayer)
+	{
+		if(EnemyPlayer->IsDead())
+		{
+			EnemyPlayer = nullptr;
+			bEnemyDetected = false;
+		}
+	}
+
+	if(EnemyPlayer != nullptr || EnemyReference != nullptr)
+	{
+		bEnemyDetected = true;
+	}
+
+	// Clears enemy target after death & pauses anims so they don't get back up after death montage
+	if(bIsDead && CombatState == ECombatState::ECS_Dead)
+	{
+		EnemyReference = nullptr;
+		EnemyPlayer = nullptr;
+		bEnemyDetected = false;
+		GetMesh()->bPauseAnims = true;
+	}
+	else
+	{
+		CombatState = ECombatState::ECS_Unoccupied;
 	}
 }
 
@@ -300,7 +406,7 @@ void AAI_BaseCharacter::RotateTowardsTarget(FVector Target)
 
 	const FRotator LookAtRotation = UKismetMathLibrary::FindLookAtRotation(WorldLocation, Target);
 
-	double LerpValue = UKismetMathLibrary::Lerp(WorldRotation.Yaw, LookAtRotation.Yaw, 0.2f);
+	double LerpValue = UKismetMathLibrary::Lerp(WorldRotation.Yaw, LookAtRotation.Yaw, 1);
 	const FRotator Rotation = UKismetMathLibrary::MakeRotator(WorldRotation.Roll, WorldRotation.Pitch, LerpValue);
 	GetCapsuleComponent()->SetWorldRotation(Rotation);
 }
@@ -347,6 +453,17 @@ void AAI_BaseCharacter::DamageDetectTrace()
 				DamageEnemy(ActorHit);
 			}
 		}
+
+		if(EnemyPlayer)
+		{
+			AActor* ActorHit;
+			ActorHit = Hit.GetActor();
+			if(AlreadyDamagedActors.Contains(ActorHit) == false)
+			{
+				AlreadyDamagedActors.AddUnique(ActorHit);
+				DamageEnemy(ActorHit);
+			}
+		}
 	}
 }
 
@@ -358,8 +475,10 @@ void AAI_BaseCharacter::DamageEnemy(AActor* Enemy)
 
 void AAI_BaseCharacter::Death()
 {
+	if(bIsDead) { return; }
+
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-	AnimInstance->StopAllMontages(1);
+	AnimInstance->StopAllMontages(0.1f);
 
 	const int32 DeathIndex = UKismetMathLibrary::RandomIntegerInRange(0, 1);
 	if(DeathMontage)
@@ -377,13 +496,12 @@ void AAI_BaseCharacter::Death()
 			break;
 		}
 
-		CombatState = ECombatState::ECS_Dead;
-		bIsDead = true;
 		SetMontageToPlay(DeathMontage, SectionName);
 	}
 
-	EnemyReference->EnemyReference = nullptr;
-	EnemyReference->bEnemyDetected = false;
+	bIsDead = true;
+	CombatState = ECombatState::ECS_Dead;
+	Character_AIController->StopMovement();
 }
 
 void AAI_BaseCharacter::StrafeAroundEnemy()
@@ -428,12 +546,18 @@ void AAI_BaseCharacter::StrafeAroundEnemy()
 	default:
 		break;
 	}
+
+	
 	const FVector CurrentLocation = GetCapsuleComponent()->GetComponentLocation();
+
+	// Rotates around Yaw axis, Direction + Distance based on current StrafeDirectionVector * 200
 	const FVector Direction = UKismetMathLibrary::RotateAngleAxis((StrafeDirectionVector * 200), 360, FVector(0,0,1));
 	const FVector StrafeDestination = (CurrentLocation + Direction);
+
 	Character_AIController->MoveToLocation(StrafeDestination, 0, true);
 
-	GetWorld()->GetTimerManager().SetTimer(StrafeCooldownHandle, this, &AAI_BaseCharacter::StrafeOffCooldown, UKismetMathLibrary::RandomFloatInRange(8, 12), false);
+	// Character unable to strafe again until StrafeOffCooldown is called (will be called after 8-10 seconds)
+	GetWorld()->GetTimerManager().SetTimer(StrafeCooldownHandle, this, &AAI_BaseCharacter::StrafeOffCooldown, UKismetMathLibrary::RandomFloatInRange(8, 10), false);
 	bCanStrafe = false;
 
 	SetUnoccupied();

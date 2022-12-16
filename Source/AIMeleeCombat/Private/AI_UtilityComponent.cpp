@@ -3,6 +3,7 @@
 
 #include "AI_UtilityComponent.h"
 #include "AI_BaseCharacter.h"
+#include "PlayerCharacter.h"
 #include "Kismet/KismetMathLibrary.h"
 
 // Sets default values for this component's properties
@@ -44,32 +45,37 @@ void UAI_UtilityComponent::InitialiseBehavior()
 			AbilitiesAvailable.Add(DodgeScore());
 			AbilitiesAvailable.Add(BlockScore());
 
-			FTimerHandle UpdateScoreTimer;
-			GetWorld()->GetTimerManager().SetTimer(UpdateScoreTimer, this, &UAI_UtilityComponent::UpdateScore, 2.0f, true);
+			
+			GetWorld()->GetTimerManager().SetTimer(UpdateScoreTimer, this, &UAI_UtilityComponent::UpdateScore, 0.5f, true);
 		}
 	}
 }
 
 void UAI_UtilityComponent::ChooseBestAbility()
 {
-	float Score = 0;
+	//float Score = 0;
 	int BestAbilityIndex = 0;
 	const float RandNum = UKismetMathLibrary::RandomFloatInRange(0, 1);
 	for (int i = 0; i < AbilitiesAvailable.Num(); ++i)
 	{
-		for (const float Item : AbilitiesAvailable)
+		// Checks that the ability has a score value > 0
+		if(AbilitiesAvailable[i] > 0)
 		{
-			// calls a random ability based on current abilities with a score higher than 0 (used as an extra way to take into account A.I's Combat Behavior, rather than just playing the highest score) 
-			if(RandNum < Item)
+			for (const float Item : AbilitiesAvailable)
 			{
-				// Checks if the [i] ability score is higher than the current score & calls the switch case relating to that index (original utility code)
-				//if(AbilitiesAvailable[i] > Score)
-				//{
-				//	BestAbilityIndex = i;
-				//	Score = AbilitiesAvailable[i];
-				//}
+				// Prioritized Dithering
+				if(RandNum < Item)
+				{
+					// Checks if the [i] ability score is higher than the current score & calls the switch case relating to that index (original utility code)
+					//if(AbilitiesAvailable[i] > Score)
+					//{
+					//	BestAbilityIndex = i;
+					//	Score = AbilitiesAvailable[i];
+					//}
 
-				BestAbilityIndex = AbilitiesAvailable.IndexOfByKey(Item);
+					// Sets index to = the element relating to Item in the AbilitiesAvailable array
+					BestAbilityIndex = AbilitiesAvailable.IndexOfByKey(Item);
+				}
 			}
 		}
 
@@ -84,6 +90,10 @@ void UAI_UtilityComponent::ChooseBestAbility()
 		if(AICharacter->GetEnemy())
 		{
 			AICharacter->SeekEnemy(AICharacter->GetEnemy());
+		}
+		if(AICharacter->GetEnemyPlayer())
+		{
+			AICharacter->SeekEnemy(AICharacter->GetEnemyPlayer());
 		}
 		break;
 
@@ -128,7 +138,13 @@ void UAI_UtilityComponent::ChooseBestAbility()
 
 void UAI_UtilityComponent::UpdateScore()
 {
-	if(AICharacter->GetCombatState() != ECombatState::ECS_Unoccupied && !AICharacter->GetEnemyDetected()) { return; }
+	if(AICharacter->IsDead())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(UpdateScoreTimer);
+		return;
+	}
+
+	if(AICharacter->GetCombatState() != ECombatState::ECS_Unoccupied) { return; }
 
 	for (const float Item : AbilitiesAvailable)
 	{
@@ -161,8 +177,9 @@ void UAI_UtilityComponent::UpdateScore()
 			AbilitiesAvailable[6] = BlockScore();
 		}
 
-		ChooseBestAbility();
 	}
+	ChooseBestAbility();
+
 }
 
 float UAI_UtilityComponent::ScoreAbilities(float BehaviorValue, TArray<float> Conditions)
@@ -178,9 +195,12 @@ float UAI_UtilityComponent::ScoreAbilities(float BehaviorValue, TArray<float> Co
 		}
 	}
 
-	float OriginalScore = Score;
-	float ModFactor = 1 - (1 / Conditions.Num());
-	float MakeupValue = (1 - OriginalScore) * ModFactor;
+	// Averaging scheme of overall score
+	// Depending on the amount of conditions being multiplied, Score can become very small,
+	// so this calculation averages it out giving it a more readable score
+	const float OriginalScore = Score;
+	const float ModFactor = 1 - (1 / Conditions.Num());
+	const float MakeupValue = (1 - OriginalScore) * ModFactor;
 	Score = OriginalScore + (MakeupValue * OriginalScore);
 	return Score;
 }
@@ -189,7 +209,7 @@ float UAI_UtilityComponent::SeekScore()
 {
 	TArray<float> SeekConditions;
 	float SeekValue = 0;
-	if(!AICharacter->InAttackRange())
+	if(!AICharacter->InAttackRange() && AICharacter->GetEnemyDetected())
 	{
 		SeekValue = 0.9f;
 	}
@@ -213,9 +233,9 @@ float UAI_UtilityComponent::StrafeScore()
 {
 	TArray<float> StrafeConditions;
 	float StrafeValue = 0;
-	if(AICharacter->CanStrafe() && AICharacter->InRangedAttackRange())
+	if(AICharacter->CanStrafe() && AICharacter->GetEnemyDetected())
 	{
-		StrafeValue = 0.7;
+		StrafeValue = 0.8;
 	}
 	else
 	{
@@ -233,7 +253,7 @@ float UAI_UtilityComponent::AttackScore()
 	TArray<float> AttackConditions;
 	float AttackRangeValue = 0;
 
-	if(AICharacter->InAttackRange())
+	if(AICharacter->InAttackRange() && AICharacter->GetEnemyDetected())
 	{
 		AttackRangeValue = 0.6f;
 	}
@@ -256,7 +276,7 @@ float UAI_UtilityComponent::RangedAttackScore()
 	float RangedAttackValue = 0;
 
 	
-	if(AICharacter->InRangedAttackRange())
+	if(AICharacter->InRangedAttackRange() && AICharacter->GetEnemyDetected())
 	{
 		RangedAttackValue = 0.3f;
 	}
@@ -276,7 +296,7 @@ float UAI_UtilityComponent::UltimateAttackScore()
 	TArray<float> UltimateAttackConditions;
 	float UltimateAttackValue = 0;
 
-	if(AICharacter->InAttackRange())
+	if(AICharacter->InAttackRange() && AICharacter->GetEnemyDetected())
 	{
 		UltimateAttackValue = 0.2f;
 	}
@@ -292,6 +312,7 @@ float UAI_UtilityComponent::UltimateAttackScore()
 	return ScoreAbilities(S_CombatBehavior->UltimateAttackValue, UltimateAttackConditions);
 }
 
+// Character attempts to Dodge incoming ranged melee attacks
 float UAI_UtilityComponent::DodgeScore()
 {
 	TArray<float> DodgeConditions;
@@ -308,18 +329,28 @@ float UAI_UtilityComponent::DodgeScore()
 			DodgeValue = 0;
 		}
 	}
-	else
+
+	if(AICharacter->GetEnemyPlayer())
 	{
-		DodgeValue = 0;
+		if(AICharacter->GetEnemyPlayer()->GetIsAttacking() && AICharacter->CanDodge())
+		{
+			DodgeValue = 0.5f;
+		}
+		else
+		{
+			DodgeValue = 0;
+		}
 	}
 
+
+
+
 	DodgeConditions.Add(DodgeValue);
-
-
-
 	return ScoreAbilities(S_CombatBehavior->DodgeValue, DodgeConditions);
 }
 
+
+// Character attempts to Block incoming melee attacks
 float UAI_UtilityComponent::BlockScore()
 {
 	TArray<float> BlockConditions;
@@ -336,15 +367,20 @@ float UAI_UtilityComponent::BlockScore()
 			BlockValue = 0;
 		}
 	}
-	else
+
+	if(AICharacter->GetEnemyPlayer())
 	{
-		BlockValue = 0;
+		if(AICharacter->GetEnemyPlayer()->GetIsAttacking() && AICharacter->CanBlock())
+		{
+			BlockValue = 0.6f;
+		}
+		else
+		{
+			BlockValue = 0;
+		}
 	}
 
 	BlockConditions.Add(BlockValue);
-
-
-
 	return ScoreAbilities(S_CombatBehavior->BlockValue, BlockConditions);
 }
 

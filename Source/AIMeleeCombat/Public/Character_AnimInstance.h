@@ -25,6 +25,9 @@ private:
 	class AAI_BaseCharacter* AICharacter;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Locomotion", meta = (AllowPrivateAccess = "true"))
+	class APlayerCharacter* PlayerCharacter;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Locomotion", meta = (AllowPrivateAccess = "true"))
 	float Speed;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Locomotion", meta = (AllowPrivateAccess = "true"))

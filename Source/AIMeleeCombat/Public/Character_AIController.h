@@ -30,6 +30,8 @@ protected:
 
 	void AIPerception();
 
+	void SetEnemyTarget(AActor* Target);
+
 private:
 
 	class UNavigationSystemV1* NavSystem;
@@ -38,5 +40,6 @@ private:
 	class AAI_BaseCharacter* AICharacter;
 
 	class UAISenseConfig_Sight* SightPerception;
+
 	
 };

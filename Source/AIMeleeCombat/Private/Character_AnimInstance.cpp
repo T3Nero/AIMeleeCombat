@@ -3,6 +3,7 @@
 
 #include "Character_AnimInstance.h"
 #include "AI_BaseCharacter.h"
+#include "PlayerCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 
@@ -18,6 +19,7 @@ UCharacter_AnimInstance::UCharacter_AnimInstance() :
 void UCharacter_AnimInstance::NativeInitializeAnimation()
 {
 	AICharacter = Cast<AAI_BaseCharacter>(TryGetPawnOwner());
+	PlayerCharacter = Cast<APlayerCharacter>(TryGetPawnOwner());
 }
 
 // Tick()
@@ -26,6 +28,11 @@ void UCharacter_AnimInstance::UpdateAnimationProperties(float DeltaTime)
 	if(AICharacter == nullptr)
 	{
 		AICharacter = Cast<AAI_BaseCharacter>(TryGetPawnOwner());
+	}
+
+	if(PlayerCharacter == nullptr)
+	{
+		PlayerCharacter = Cast<APlayerCharacter>(TryGetPawnOwner());
 	}
 
 	if(AICharacter)
@@ -48,5 +55,27 @@ void UCharacter_AnimInstance::UpdateAnimationProperties(float DeltaTime)
 		// Gets characters current velocity to determine direction to apply (used for strafing when choosing which animation to play in the Anim Blend Space)
 		FRotator MovementRotation = UKismetMathLibrary::MakeRotFromX(AICharacter->GetVelocity());
 		Direction = UKismetMathLibrary::NormalizedDeltaRotator(MovementRotation, AICharacter->GetActorRotation()).Yaw;
+	}
+
+	if(PlayerCharacter)
+	{
+		// Set Speed based on Characters current Velocity
+		FVector Velocity{ PlayerCharacter->GetVelocity() };
+		Velocity.Z = 0;
+		Speed = Velocity.Size();
+
+		// Check to see if Character is accelerating (used for transitioning anim state between idle/run)
+		if(PlayerCharacter->GetCharacterMovement()->GetCurrentAcceleration().Size() > 0)
+		{
+			bIsAccelerating = true;
+		}
+		else
+		{
+			bIsAccelerating = false;
+		}
+
+		// Gets characters current velocity to determine direction to apply (used for strafing when choosing which animation to play in the Anim Blend Space)
+		FRotator MovementRotation = UKismetMathLibrary::MakeRotFromX(PlayerCharacter->GetVelocity());
+		Direction = UKismetMathLibrary::NormalizedDeltaRotator(MovementRotation, PlayerCharacter->GetActorRotation()).Yaw;
 	}
 }

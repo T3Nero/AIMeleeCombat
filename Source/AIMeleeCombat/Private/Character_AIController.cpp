@@ -4,6 +4,7 @@
 #include "Character_AIController.h"
 #include "AI_BaseCharacter.h"
 #include "NavigationSystem.h"
+#include "PlayerCharacter.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AIPerceptionComponent.h"
@@ -52,18 +53,7 @@ void ACharacter_AIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus con
 {
 	if(AICharacter)
 	{
-		if(AICharacter->IsEnemy(Actor) && !AICharacter->GetEnemyDetected())
-		{
-			AAI_BaseCharacter* Enemy = Cast<AAI_BaseCharacter>(Actor);
-			AICharacter->SetEnemy(Enemy);
-			AICharacter->SetEnemyDetected(true);
-		}
-
-		if((Actor->GetActorLocation() - AICharacter->GetActorLocation()).Length() >= SightPerception->LoseSightRadius)
-		{
-			AICharacter->SetEnemy(nullptr);
-			AICharacter->SetEnemyDetected(false);
-		}
+		SetEnemyTarget(Actor);
 	}
 }
 
@@ -82,6 +72,18 @@ void ACharacter_AIController::AIPerception()
 	GetPerceptionComponent()->SetDominantSense(*SightPerception->GetSenseImplementation());
 	GetPerceptionComponent()->OnTargetPerceptionUpdated.AddDynamic(this, &ACharacter_AIController::OnPerceptionUpdated);
 	GetPerceptionComponent()->ConfigureSense(*SightPerception);
+}
+
+void ACharacter_AIController::SetEnemyTarget(AActor* Target)
+{
+	if(AICharacter)
+	{
+		if(AICharacter->IsEnemy(Target))
+		{
+			// Sets enemy detected to true if the target within sight radius is an enemy
+			AICharacter->SetEnemyDetected(true);
+		}
+	}
 }
 
 

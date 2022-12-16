@@ -52,7 +52,7 @@ protected:
 	UFUNCTION()
 	void UpdateScore();
 
-	float ScoreAbilities(float BehaviorValue, TArray<float> Conditions);
+	static float ScoreAbilities(float BehaviorValue, TArray<float> Conditions);
 
 	float SeekScore();
 
@@ -71,9 +71,10 @@ protected:
 
 private:
 
-	FCombatBehavior* S_CombatBehavior;
-
+	UPROPERTY()
 	class AAI_BaseCharacter* AICharacter;
+
+	FCombatBehavior* S_CombatBehavior;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI Behavior", meta = (AllowPrivateAccess = "true"))
 	UDataTable* CombatBehaviorData;
@@ -83,5 +84,7 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI Behavior", meta = (AllowPrivateAccess = "true"))
 	TArray<float> AbilitiesAvailable;
+
+	FTimerHandle UpdateScoreTimer;
 		
 };

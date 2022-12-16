@@ -51,9 +51,6 @@ protected:
 
 	void OnAIMoveCompleted(struct FAIRequestID RequestID, const struct FPathFollowingResult &Result);
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	class UAI_UtilityComponent* UtilityComponent;
-
 	void SetupStimulus();
 
 	void SetMontageToPlay(UAnimMontage* Montage, FName Section);
@@ -91,12 +88,15 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
 	class UAIPerceptionStimuliSourceComponent* Stimulus;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
+	class UAI_UtilityComponent* UtilityComponent;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
 	float PatrolRadius;
 
 	// Checks whether the AI are friendly toward each other or not
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
-	float TeamNumber;
+	int32 TeamNumber;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
 	float CurrentHealth;
@@ -141,7 +141,14 @@ private:
 	bool bAttacking;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
+	bool bIsBlocking;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
+	bool bIsDodging;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = AI, meta = (AllowPrivateAccess = "true"))
 	bool bIsDead;
+
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = WeaponComponents, meta = (AllowPrivateAccess = "true"))
 	USceneComponent* TraceStart;
@@ -175,9 +182,16 @@ private:
 	TArray<AActor*> AlreadyDamagedActors;
 
 
-	ECombatState CombatState;
+	UPROPERTY() // allows the engine to garbage collect automatically if needed 
 	class ACharacter_AIController* Character_AIController;
+
+	UPROPERTY()
 	AAI_BaseCharacter* EnemyReference;
+
+	UPROPERTY()
+	class APlayerCharacter* EnemyPlayer;
+
+	ECombatState CombatState;
 	FTimerHandle AttackTimerHandle;
 	FTimerHandle StrafeCooldownHandle;
 	FTimerHandle BlockCooldownHandle;
@@ -200,7 +214,7 @@ public:
 
 	void Dodging();
 
-	bool IsEnemy(AActor* Target) const;
+	bool IsEnemy(AActor* Target);
 
 	// overriden from actor class
 	virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
@@ -217,9 +231,10 @@ public:
 	FORCEINLINE bool CanBlock() const { return bCanBlock; }
 	FORCEINLINE bool CanDodge() const { return bCanDodge; }
 	FORCEINLINE bool GetIsAttacking() const { return bAttacking; }
-	FORCEINLINE bool IsEnemyDead() const { return bIsDead; }
+	FORCEINLINE bool IsDead() const { return bIsDead; }
+	FORCEINLINE int32 GetTeamNumber() const { return TeamNumber; }
+	FORCEINLINE APlayerCharacter* GetEnemyPlayer() const {return EnemyPlayer;}
 
 	// public setters (allows access to private variables in other classes)
-	FORCEINLINE void SetEnemy(AAI_BaseCharacter* Enemy) {EnemyReference = Enemy;}
 	FORCEINLINE void SetEnemyDetected(bool ED) {bEnemyDetected = ED;}
 };
